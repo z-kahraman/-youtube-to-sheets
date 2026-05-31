@@ -12,6 +12,118 @@ review context. The privacy policy is in `PRIVACY.en.md` / `PRIVACY.md`.
 
 ---
 
+## Release notes — v0.4.5
+
+### English (default locale)
+
+```
+Bug fix: Google connection no longer drops after an hour, and signing out
+keeps your existing sheets accessible.
+
+What changed
+- Sign out is now a local-only action: it clears the cached token on this
+  device but leaves your Google authorization in place. Reconnecting on the
+  same Google account keeps access to every sheet the extension created —
+  no more "have to create a fresh sheet every time" loop.
+- A separate, confirmed "Revoke all access in Google" link is available
+  for when you really want to wipe the grant (also clears the local sheet
+  list, since those sheets become inaccessible after a full revoke).
+- Firefox: tokens are silently refreshed in the background when possible
+  (prompt=none flow). You should no longer have to re-authorize every hour;
+  re-auth only kicks in if Google can't refresh silently.
+
+No new permissions. No UI surprises beyond the small "Revoke all access"
+link under Sign out.
+```
+
+### Türkçe
+
+```
+Hata düzeltmesi: Google bağlantısı artık her saat kopmuyor ve çıkış yapmak
+mevcut sheet'lere erişimini kaybettirmiyor.
+
+Neler değişti
+- "Çıkış yap" artık yalnızca yerel bir aksiyon: bu cihazdaki token'ı
+  temizler ama Google nezdindeki yetkini korur. Aynı Google hesabıyla
+  tekrar bağlandığında eklentinin oluşturduğu tüm sheet'lere erişim aynen
+  kalır — "her seferinde yeni sheet açmak zorunda kalma" döngüsü bitti.
+- "Google'da yetkileri tamamen iptal et" linki ayrı bir onaylı eylem
+  olarak eklendi (gerçekten yetkiyi sıfırdan iptal etmek istediğinde).
+  Bu eylem yerel sheet listesini de temizler, çünkü tam iptalden sonra o
+  sheet'lere zaten erişilemez.
+- Firefox: token'lar artık mümkün olduğunda arka planda sessizce
+  yenileniyor (prompt=none akışı). Her saat yeniden yetkilendirmen
+  gerekmemeli; sessiz yenileme başarısız olursa yalnız o zaman Google
+  ekranı çıkar.
+
+Yeni izin yok. UI'da tek görünür değişiklik: "Çıkış yap" altındaki küçük
+"Google'da yetkileri tamamen iptal et" linki.
+```
+
+---
+
+## Notes to reviewer — v0.4.5
+
+> Same ~3000-char budget. This block is ~2400 chars.
+
+```
+Patch release on top of 0.4.4. Single fix area: how Sign-Out interacts with
+Google's grant + Firefox's 1-hour implicit-flow token cap.
+
+WHAT CHANGED (auth.js, options.js)
+
+1) Sign out is now local-only.
+   options.js disconnect-btn → calls signOut() which only clears the
+   browser-side token cache. It does NOT call oauth2/revoke anymore.
+   Why: drive.file grants are per-grant; revoking the grant drops access
+   to sheets the extension created earlier. The old behavior forced users
+   to create a fresh sheet on every reconnect.
+
+2) Full revoke is now an explicit, confirmed action.
+   New revoke-grant-btn (small text-link under Sign Out) → confirm dialog
+   → revokeToken(token) → clears createdSheets + selectedSheet from
+   storage.sync → opens myaccount.google.com/permissions in a new tab.
+   Why: makes the destructive path opt-in and visible; the listed sheets
+   would otherwise stay in the picker but fail with 403 on append.
+
+3) Firefox silent token refresh (auth.js).
+   getTokenFirefox now: cached → trySilentRefreshFirefox() → interactive.
+   The silent path uses launchWebAuthFlow({interactive:false}) with
+   &prompt=none. Google returns a fresh access_token without a dialog
+   when the user is already signed in to Google. If Google can't refresh
+   silently (sign-in expired, consent required, etc.), it falls back to
+   the existing interactive flow — no behavior regression.
+   Why: implicit flow gives no refresh token, so every 60 minutes the
+   user was forced through the OAuth dialog. Silent refresh removes that
+   friction without storing any new credential.
+
+NO CHANGES TO:
+- permissions / host_permissions / content_scripts (identical to 0.4.4)
+- data_collection_permissions (still personallyIdentifyingInfo +
+  websiteContent; same justification)
+- OAuth scopes (still drive.file + userinfo.email)
+- Manifest structure (only "version" bumped to 0.4.5 in both manifests)
+
+HOW TO TEST THE FIX
+
+1. Install zip → Connect with Google → Create a sheet.
+2. Click "Sign out" (was: "Disconnect"). Reconnect with the same Google
+   account. The previously created sheet should still appear in the
+   picker and saving to it should succeed.
+3. Click the small "Revoke all access in Google" link under Sign Out.
+   Confirm. A myaccount.google.com tab opens; the local sheet list is
+   cleared. (This is the explicit destructive path.)
+4. (Firefox, optional) Leave the options page open for ~60 minutes,
+   then trigger a save from a YouTube watch page. Background should
+   refresh the token silently; no OAuth dialog should appear unless the
+   Google session itself expired.
+
+SOURCE is unchanged from 0.4.4 in shape: same ./build.sh, same vanilla
+JS, no minification/bundling. github.com/z-kahraman/youtube-to-sheets
+```
+
+---
+
 ## Release notes — v0.4.4
 
 ### English (default locale)
