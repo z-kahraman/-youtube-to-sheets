@@ -126,6 +126,27 @@ async function cacheFirefoxToken(value, expiresInSec) {
   });
 }
 
+// ---- Drive: uygulamanın oluşturduğu sheet'leri listele ----
+// drive.file scope ile yapılan files.list YALNIZ bu OAuth client'ın oluşturduğu
+// dosyaları döndürür → kullanıcının diğer Drive içeriği görünmez. Bu sayede
+// aynı Gmail ile farklı cihazda / temiz yüklemede de eski sheet'ler gelir
+// (storage.sync senkron olmasa bile, kaynak Google'ın kendi tarafı olur).
+// Chrome ve Firefox AYRI client_id kullandığı için her tarayıcı sadece kendi
+// oluşturduğu sheet'leri görür — bu drive.file'ın doğal sınırlaması.
+async function listAppSpreadsheets(token) {
+  const q = encodeURIComponent(
+    "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+  );
+  const fields = encodeURIComponent('files(id,name)');
+  const url =
+    'https://www.googleapis.com/drive/v3/files' +
+    `?q=${q}&fields=${fields}&pageSize=200&orderBy=modifiedTime desc`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Drive list başarısız: ${res.status}`);
+  const data = await res.json();
+  return (data.files || []).map((f) => ({ id: f.id, name: f.name }));
+}
+
 // ---- Lokal çıkış (Google grant'ine DOKUNMAZ) ----
 // Sadece tarayıcı tarafındaki token cache'i temizler. Kullanıcı tekrar bağlandığında
 // aynı grant aktif kalır → drive.file ile yaratılmış eski sheet'lere erişim korunur.

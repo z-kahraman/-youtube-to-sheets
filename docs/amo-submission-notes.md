@@ -12,6 +12,138 @@ review context. The privacy policy is in `PRIVACY.en.md` / `PRIVACY.md`.
 
 ---
 
+## Release notes — v0.4.6
+
+> AMO'ya doğrudan 0.4.6 yüklenir; 0.4.5 GitHub'da tag olarak duruyor ama AMO'da
+> atlanıyor. Aşağıdaki notlar v0.4.4 → v0.4.6 farkını anlatır (auth fix +
+> Drive-based cross-device sync).
+
+### English (default locale)
+
+```
+Two fixes that make reconnecting / using multiple devices much smoother.
+
+What changed
+- Sheet list now comes from Google Drive instead of browser-synced storage,
+  so signing in on a new device, a different browser profile, or a clean
+  install shows every sheet you previously created with this extension —
+  not an empty picker. The list refreshes automatically whenever you open
+  the options page. Browser-side storage is now just a cache for offline
+  fallback. (Note: Chrome and Firefox use separate OAuth clients, so each
+  browser sees the sheets it created on its own side.)
+- Sign out is now a local-only action: it clears the cached token on this
+  device but leaves your Google authorization in place. Reconnecting on
+  the same Google account keeps access to every sheet the extension
+  created — no more "have to create a fresh sheet every time" loop.
+- A separate, confirmed "Revoke all access in Google" link is available
+  for when you really want to wipe the grant (also clears the local sheet
+  list, since those sheets become inaccessible after a full revoke).
+- Firefox: tokens are silently refreshed in the background when possible
+  (prompt=none flow). You should no longer have to re-authorize every
+  hour; re-auth only kicks in if Google can't refresh silently.
+
+No new permissions, no new OAuth scopes.
+```
+
+### Türkçe
+
+```
+Yeniden bağlanmayı ve birden fazla cihazda kullanmayı çok daha akıcı hâle
+getiren iki düzeltme.
+
+Neler değişti
+- Sheet listesi artık tarayıcı senkronu yerine doğrudan Google Drive'dan
+  geliyor. Yeni bir cihazda / başka bir tarayıcı profilinde / temiz
+  kurulumda bağlandığında, bu eklenti ile daha önce oluşturduğun tüm
+  sheet'ler picker'da görünür — boş liste yok. Liste, ayarlar sayfasını
+  açtığında otomatik tazelenir. Tarayıcı tarafındaki kayıt artık yalnız
+  çevrimdışı fallback için bir önbellek. (Not: Chrome ve Firefox ayrı
+  OAuth client'ı kullandığı için her tarayıcı kendi tarafında oluşturduğu
+  sheet'leri görür.)
+- "Çıkış yap" artık yalnız yerel: bu cihazdaki token'ı temizler ama
+  Google nezdindeki yetkini korur. Aynı hesapla tekrar bağlandığında
+  eklentinin oluşturduğu tüm sheet'lere erişim aynen sürer — "her sefer
+  yeni sheet açma" döngüsü bitti.
+- "Google'da yetkileri tamamen iptal et" linki ayrı bir onaylı eylem
+  olarak eklendi. Gerçekten yetkiyi sıfırlamak istediğinde kullanılır;
+  bu durumda yerel sheet listesi de temizlenir.
+- Firefox: token'lar artık mümkün olduğunda arka planda sessizce
+  yenileniyor (prompt=none akışı). Her saat yeniden yetkilendirme
+  zorunluluğu kalktı.
+
+Yeni izin yok, yeni OAuth scope yok.
+```
+
+---
+
+## Notes to reviewer — v0.4.6
+
+> AMO ~3000 karakter limiti. Bu blok ~2880 chars.
+
+```
+Patch on top of 0.4.4 (0.4.5 was a same-fix-area iteration that landed in
+git but was not submitted to AMO; 0.4.6 supersedes it). Two fix areas:
+
+1) SHEET LIST NOW COMES FROM DRIVE (auth.js, options.js)
+
+   options.js loadSheetList() previously read createdSheets from
+   storage.sync. That meant a new device, a new browser profile, or a
+   clean install showed an empty picker even when the same Google account
+   had sheets from a previous session.
+
+   New behavior:
+   - Render storage cache immediately for fast first paint.
+   - Call drive.files.list with drive.file scope; the API returns ONLY
+     files this OAuth client created (not the user's other Drive content),
+     which is exactly the set the picker needs.
+   - Update storage.sync.createdSheets with the fresh list (cache for
+     offline fallback) and re-render.
+   - On failure (offline, 403) the cached list stays visible.
+
+   The query is q=mimeType='application/vnd.google-apps.spreadsheet' and
+   trashed=false, fields=files(id,name), orderBy=modifiedTime desc.
+
+   Chrome and Firefox use separate OAuth clients, so each browser sees
+   only what it created. This is drive.file's intended boundary.
+
+2) SIGN OUT NO LONGER REVOKES THE GOOGLE GRANT (auth.js, options.js)
+
+   options.js disconnect-btn now calls a new signOut() that only clears
+   the local token cache. The oauth2/revoke call moved to a new
+   revoke-grant-btn (small text-link under Sign Out) behind a confirm()
+   dialog; that path also clears createdSheets + selectedSheet and opens
+   myaccount.google.com/permissions.
+
+   Why: drive.file grants are per-grant, so revoking on every sign-out
+   dropped access to sheets the extension created earlier, forcing users
+   to create a fresh one on every reconnect.
+
+3) FIREFOX SILENT TOKEN REFRESH (auth.js)
+
+   getTokenFirefox now tries launchWebAuthFlow({interactive:false}) with
+   &prompt=none before any interactive prompt. Returns a fresh
+   access_token dialoglessly when the user is signed in to Google; falls
+   back to the existing interactive flow on failure.
+
+NO CHANGES TO permissions, host_permissions, content_scripts,
+data_collection_permissions, OAuth scopes, or manifest structure
+(only "version" bumped). Drive list reuses the existing
+www.googleapis.com host permission.
+
+HOW TO TEST
+
+1. Install zip → Connect → Create a sheet. Picker shows it.
+2. Sign out (local). Reconnect. Picker still lists the sheet (from Drive).
+3. Clear storage / install on a fresh profile. Connect with the same
+   Google account. Picker populates from Drive, not empty.
+4. Click "Revoke all access in Google" to verify the destructive path.
+
+SOURCE shape unchanged: ./build.sh, vanilla JS, no minify/bundle.
+github.com/z-kahraman/youtube-to-sheets
+```
+
+---
+
 ## Release notes — v0.4.5
 
 ### English (default locale)

@@ -180,23 +180,40 @@ async function refreshUI() {
   }
 }
 
-// Uygulamanın daha önce oluşturduğu sheet'leri listele (storage'dan)
-async function loadSheetList() {
-  const select = document.getElementById('sheet-list');
+// Sheet listesini dropdown'a yaz
+function renderSheetOptions(select, sheets) {
   select.innerHTML = '';
-
-  const sheets = await getCreatedSheets();
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = sheets.length ? t('selectSheet') : t('noSheetsYet');
   select.appendChild(placeholder);
-
   sheets.forEach((s) => {
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = s.name;
     select.appendChild(opt);
   });
+}
+
+// Uygulamanın oluşturduğu sheet'leri listele.
+// Akış: önce storage cache'i anında göster → ardından Drive API'den tazele.
+// Kaynağı Google olduğu için aynı Gmail ile her cihazda / temiz yüklemede de
+// eski sheet'ler gelir; cache yalnız çevrimdışı / 403 senaryosu için fallback.
+async function loadSheetList() {
+  const select = document.getElementById('sheet-list');
+  let sheets = await getCreatedSheets();
+  renderSheetOptions(select, sheets);
+
+  try {
+    const token = await getToken(false);
+    if (!token) return;
+    const remote = await listAppSpreadsheets(token);
+    sheets = remote;
+    await chrome.storage.sync.set({ createdSheets: sheets });
+    renderSheetOptions(select, sheets);
+  } catch {
+    // Drive çağrısı başarısız (offline / 403 / token süresi) → cache ile devam
+  }
 }
 
 // ============================================================
