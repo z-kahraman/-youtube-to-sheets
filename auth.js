@@ -51,26 +51,55 @@ function getTokenChrome(interactive) {
   });
 }
 
-// ---- Firefox: launchWebAuthFlow (implicit flow) ----
-async function getTokenFirefox(interactive) {
-  const cached = await getCachedFirefoxToken();
-  if (cached) return cached;
-  if (!interactive) throw new Error('Token yok — önce bağlan');
-
-  const redirectUri = identityApi().getRedirectURL();
-  const authUrl =
-    'https://accounts.google.com/o/oauth2/v2/auth' +
+// Firefox auth URL'i (silent / interactive)
+function buildFirefoxAuthUrl(redirectUri, { silent = false } = {}) {
+  return 'https://accounts.google.com/o/oauth2/v2/auth' +
     '?client_id=' + encodeURIComponent(FIREFOX_OAUTH.clientId) +
     '&response_type=token' +
     '&redirect_uri=' + encodeURIComponent(redirectUri) +
-    '&scope=' + encodeURIComponent(FIREFOX_OAUTH.scopes.join(' '));
+    '&scope=' + encodeURIComponent(FIREFOX_OAUTH.scopes.join(' ')) +
+    (silent ? '&prompt=none' : '');
+}
 
+// ---- Firefox: launchWebAuthFlow (implicit flow) ----
+// Akış: cached token → sessiz refresh (prompt=none) → interactive (kullanıcı izniyle).
+// Implicit flow refresh token vermez; 1 saat sonra token düşer. Sessiz refresh
+// dialog açmadan yeniler (kullanıcı Google'a girişliyse). Başarısızsa interactive'e düşer.
+async function getTokenFirefox(interactive) {
+  const cached = await getCachedFirefoxToken();
+  if (cached) return cached;
+
+  // Sessiz yenilemeyi her zaman dene — interactive=false olsa bile (background'tan).
+  const silent = await trySilentRefreshFirefox();
+  if (silent) return silent;
+
+  if (!interactive) throw new Error('Token yok — önce bağlan');
+
+  const redirectUri = identityApi().getRedirectURL();
+  const authUrl = buildFirefoxAuthUrl(redirectUri);
   const redirect = await identityApi().launchWebAuthFlow({ interactive: true, url: authUrl });
   const parsed = parseFragment(redirect);
   if (!parsed.access_token) throw new Error('Token alınamadı (Firefox)');
 
   await cacheFirefoxToken(parsed.access_token, parseInt(parsed.expires_in || '3600', 10));
   return parsed.access_token;
+}
+
+// Sessiz token yenileme: launchWebAuthFlow({interactive:false}) + prompt=none.
+// Google kullanıcı oturum açık + onay vermişse access_token döndürür; aksi halde
+// 'interaction_required' ile redirect olur ve fetch null/throw döner → null veririz.
+async function trySilentRefreshFirefox() {
+  try {
+    const redirectUri = identityApi().getRedirectURL();
+    const authUrl = buildFirefoxAuthUrl(redirectUri, { silent: true });
+    const redirect = await identityApi().launchWebAuthFlow({ interactive: false, url: authUrl });
+    const parsed = parseFragment(redirect);
+    if (!parsed.access_token) return null;
+    await cacheFirefoxToken(parsed.access_token, parseInt(parsed.expires_in || '3600', 10));
+    return parsed.access_token;
+  } catch {
+    return null;
+  }
 }
 
 // Redirect URL'inin #fragment'ından access_token/expires_in ayıkla
@@ -97,7 +126,27 @@ async function cacheFirefoxToken(value, expiresInSec) {
   });
 }
 
-// ---- Token iptal (her iki tarayıcı) ----
+// ---- Lokal çıkış (Google grant'ine DOKUNMAZ) ----
+// Sadece tarayıcı tarafındaki token cache'i temizler. Kullanıcı tekrar bağlandığında
+// aynı grant aktif kalır → drive.file ile yaratılmış eski sheet'lere erişim korunur.
+// Tam revoke için revokeToken(token) kullanılır (kullanıcı açık eylem yapmalı).
+async function signOut() {
+  if (HAS_GET_AUTH_TOKEN) {
+    let token = null;
+    try { token = await getTokenChrome(false); } catch { /* zaten cache'te yok */ }
+    if (token) {
+      await new Promise((resolve) => {
+        chrome.identity[CHROME_REMOVE_CACHED_AUTH_TOKEN]({ token }, () => resolve());
+      });
+    }
+  } else {
+    await chrome.storage.local.remove('ff_token');
+  }
+}
+
+// ---- Tam revoke: Google nezdinde grant'i iptal eder ----
+// UYARI: drive.file ile yaratılmış sheet'lere erişim de düşebilir; çağıran taraf
+// createdSheets listesini de temizlemeli. Sadece kullanıcı açıkça istediğinde kullan.
 async function revokeToken(token) {
   if (HAS_GET_AUTH_TOKEN) {
     await new Promise((resolve) => {

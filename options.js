@@ -225,13 +225,28 @@ document.getElementById('connect-btn').addEventListener('click', async (e) => {
   }
 });
 
+// Çıkış: sadece lokal token cache'i temizler — Google'daki grant korunur.
+// Tekrar bağlanınca aynı grant aktif olur, eski drive.file dosyalarına erişim sürer.
+// createdSheets ve selectedSheet KORUNUR (bilinçli: kullanıcı geri dönünce listesi yerinde).
 document.getElementById('disconnect-btn').addEventListener('click', async () => {
-  try {
-    const token = await getToken(false);
-    await revokeToken(token);
-  } catch {}
-  await clearSelectedSheet();
+  await signOut();
   toast(t('disconnected'));
+  await refreshUI();
+});
+
+// Tam revoke: Google nezdinde grant'i iptal eder + listeyi temizler.
+// drive.file ile yaratılmış sheet'lere erişim de düşeceği için createdSheets boşaltılır.
+document.getElementById('revoke-grant-btn').addEventListener('click', async () => {
+  if (!confirm(t('revokeGrantConfirm'))) return;
+  let token = null;
+  try { token = await getToken(false); } catch { /* zaten yok */ }
+  if (token) {
+    try { await revokeToken(token); } catch { /* network hatası — yine de lokali temizle */ }
+  }
+  await clearSelectedSheet();
+  await chrome.storage.sync.remove('createdSheets');
+  window.open('https://myaccount.google.com/permissions', '_blank', 'noopener,noreferrer');
+  toast(t('revokeGrantDone'));
   await refreshUI();
 });
 
