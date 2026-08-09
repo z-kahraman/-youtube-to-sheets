@@ -173,6 +173,7 @@ async function refreshUI() {
     document.getElementById('selected-sheet-name').textContent = selected.name;
     document.getElementById('open-sheet-btn').href =
       `https://docs.google.com/spreadsheets/d/${selected.id}/edit`;
+    loadSummary(selected.id); // arka planda dolsun; UI'ı bekletme
   } else {
     hide('current-sheet');
     show('sheet-picker');
@@ -201,19 +202,54 @@ function renderSheetOptions(select, sheets) {
 // eski sheet'ler gelir; cache yalnız çevrimdışı / 403 senaryosu için fallback.
 async function loadSheetList() {
   const select = document.getElementById('sheet-list');
-  let sheets = await getCreatedSheets();
+  const sheets = await getCreatedSheets();
   renderSheetOptions(select, sheets);
 
   try {
     const token = await getToken(false);
     if (!token) return;
     const remote = await listAppSpreadsheets(token);
-    sheets = remote;
-    await chrome.storage.sync.set({ createdSheets: sheets });
-    renderSheetOptions(select, sheets);
+    renderSheetOptions(select, remote); // dropdown tam listeyi gösterir
+    try {
+      // sync'te item başına ~8KB kota var → cache'i kırparak yaz
+      await chrome.storage.sync.set({ createdSheets: remote.slice(0, 50) });
+    } catch { /* kota aşımı vb. → cache güncellenemedi, dropdown yine günceldir */ }
   } catch {
     // Drive çağrısı başarısız (offline / 403 / token süresi) → cache ile devam
   }
+}
+
+// Seçili sheet'in özeti: toplam kayıt + son 5 satır (başarısızsa gizli kalır)
+async function loadSummary(sheetId) {
+  const summaryEl = document.getElementById('summary');
+  summaryEl.classList.add('hidden');
+  try {
+    const token = await getToken(false);
+    // Sekme adı verilmeyen aralık ilk sekmeyi hedefler (kayıtların olduğu sekme)
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent('A2:J')}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const rows = data.values || [];
+    document.getElementById('total-count').textContent = String(rows.length);
+    const list = document.getElementById('recent-list');
+    list.textContent = '';
+    rows.slice(-5).reverse().forEach((r) => {
+      const li = document.createElement('li');
+      const title = document.createElement('span');
+      title.className = 'r-title';
+      title.textContent = r[1] || r[4] || '—';
+      title.title = r[1] || '';
+      const status = document.createElement('span');
+      status.className = 'r-status';
+      status.textContent = r[9] || '';
+      li.append(title, status);
+      list.appendChild(li);
+    });
+    summaryEl.classList.remove('hidden');
+  } catch { /* offline vb. → özet gösterilmez */ }
 }
 
 // ============================================================
@@ -227,6 +263,11 @@ document.getElementById('lang-select').addEventListener('change', async (e) => {
 
 document.getElementById('theme-select').addEventListener('change', (e) => {
   setTheme(e.target.value);
+});
+
+// Video açılışındaki "kaydedeyim mi?" balonunu aç/kapa
+document.getElementById('prompt-toggle').addEventListener('change', (e) => {
+  chrome.storage.sync.set({ showPrompt: e.target.checked });
 });
 
 document.getElementById('connect-btn').addEventListener('click', async (e) => {
@@ -311,6 +352,12 @@ async function init() {
   applyTheme(theme);
   document.getElementById('theme-select').value = theme;
   document.getElementById('lang-select').value = currentLang();
+  try {
+    const { showPrompt } = await chrome.storage.sync.get('showPrompt');
+    document.getElementById('prompt-toggle').checked = showPrompt !== false;
+  } catch {
+    document.getElementById('prompt-toggle').checked = true;
+  }
   document.getElementById('app-version').textContent = 'v' + chrome.runtime.getManifest().version;
   applyI18n();
   await refreshUI();

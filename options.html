@@ -32,6 +32,12 @@
         <option value="dark" data-i18n="themeDark"></option>
       </select>
     </div>
+    <div class="setting setting-check">
+      <label class="check-label" for="prompt-toggle">
+        <input type="checkbox" id="prompt-toggle">
+        <span data-i18n="showPromptLabel"></span>
+      </label>
+    </div>
   </div>
 
   <main>
@@ -71,6 +77,11 @@
       <div class="btn-row">
         <a id="open-sheet-btn" class="btn-link" target="_blank" rel="noopener" data-i18n="openSheet"></a>
         <button id="change-sheet-btn" class="secondary" data-i18n="change"></button>
+      </div>
+      <div id="summary" class="hidden">
+        <hr>
+        <p class="muted"><span data-i18n="recentSaves"></span> · <span data-i18n="totalSaved"></span>: <span id="total-count">0</span></p>
+        <ul id="recent-list"></ul>
       </div>
       <p class="hint" data-i18n="howToHint"></p>
     </div>

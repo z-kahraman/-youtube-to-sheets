@@ -14,15 +14,21 @@ servers, analytics, or ads. The extension only accesses Sheets it created (`driv
 ![Setup / options page](screenshots/options-en.png)
 
 ## Features
-- **Right-click → "Save to Sheet"** on any YouTube watch page, or use the
-  **"Save this video?" prompt** that appears when a video opens (once per video)
-- A small note card opens at the cursor (isolated in a closed Shadow DOM)
+- **Right-click → "Save to Sheet"** on any YouTube watch or **Shorts** page, press
+  **Alt+S**, click the toolbar icon, or use the **"Save this video?" prompt** that
+  appears when a video opens (once per video; can be turned off in settings)
+- A small note card opens at the cursor (isolated in a closed Shadow DOM;
+  Esc or clicking outside closes it)
 - Auto-filled info: title, channel, channel link, video URL, watched / total time
 - Note + multiple **tags** (chips via comma / Tab / Enter)
 - **One row per video (upsert):** saving the same video again updates its row —
   note appended, tags merged, watched time refreshed — instead of duplicating
-- **Status** auto-derived from watch progress (Watched / Partially watched / Opened), editable in the card
-- Create a sheet, pick one you created, or **open it** in a new tab from the options page
+- **Already saved?** The card tells you, previews your existing note, and loads
+  existing tags as editable chips
+- **Status** auto-derived from watch progress (Watched / Partially watched / Opened),
+  editable in the card — and never silently downgraded on a re-save
+- Create a sheet, pick one you created, or **open it** in a new tab from the options
+  page, with a **recent-saves summary**
 - **Light / dark / auto theme** (options page) + TR/EN language
 - 10-column row: Date, Title, Channel, Channel Link, URL, Watched Time, Total Time, Note, Tags, Status
 

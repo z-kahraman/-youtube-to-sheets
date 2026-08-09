@@ -73,7 +73,10 @@ async function getTokenFirefox(interactive) {
   const silent = await trySilentRefreshFirefox();
   if (silent) return silent;
 
-  if (!interactive) throw new Error('Token yok — önce bağlan');
+  // t() strings.js'ten gelir; her bağlamda birlikte yüklenirler (güvenlik için kontrol)
+  if (!interactive) {
+    throw new Error(typeof t === 'function' ? t('tokenMissing') : 'Not connected');
+  }
 
   const redirectUri = identityApi().getRedirectURL();
   const authUrl = buildFirefoxAuthUrl(redirectUri);
@@ -145,6 +148,19 @@ async function listAppSpreadsheets(token) {
   if (!res.ok) throw new Error(`Drive list başarısız: ${res.status}`);
   const data = await res.json();
   return (data.files || []).map((f) => ({ id: f.id, name: f.name }));
+}
+
+// ---- 401 sonrası: geçersiz token'ı cache'ten düşür ----
+// Google grant'ine dokunmaz; çağıran taraf getToken() ile taze token alır.
+// (Chrome getAuthToken bazen süresi dolmuş/iptal edilmiş token döndürebilir.)
+async function invalidateToken(token) {
+  if (HAS_GET_AUTH_TOKEN) {
+    await new Promise((resolve) => {
+      chrome.identity[CHROME_REMOVE_CACHED_AUTH_TOKEN]({ token }, () => resolve());
+    });
+  } else {
+    await chrome.storage.local.remove('ff_token');
+  }
 }
 
 // ---- Lokal çıkış (Google grant'ine DOKUNMAZ) ----

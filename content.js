@@ -5,6 +5,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (sender.id !== chrome.runtime.id) return; // sadece kendi uzantımızdan gelen mesajları işle
   if (msg.action === 'openSaveCard') openSaveCard();
   else if (msg.action === 'saveResult') handleSaveResult(msg);
+  else if (msg.action === 'lookupResult') handleLookupResult(msg);
 });
 
 // Sağ tık konumunu takip et → kart tam orada açılsın
@@ -34,23 +35,55 @@ function computeStatusKey(video) {
   return 'statusOpened';
 }
 
+// Durum sıralaması + hücre metninden anahtara dönüş (tüm dillerde tanır;
+// background'taki no-downgrade mantığının kart tarafındaki karşılığı)
+const STATUS_RANK = { statusOpened: 0, statusPartial: 1, statusWatched: 2 };
+
+function statusKeyFromText(text) {
+  const s = (text || '').trim();
+  for (const lang of Object.keys(I18N)) {
+    for (const key of Object.keys(STATUS_RANK)) {
+      if (I18N[lang][key] === s) return key;
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// Aktif video ID'si — watch (?v=) ve shorts (/shorts/ID) desteklenir
+// ============================================================
+function currentVideoId() {
+  if (location.pathname === '/watch') {
+    return new URLSearchParams(location.search).get('v');
+  }
+  const m = location.pathname.match(/^\/shorts\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function isShortsPage() {
+  return location.pathname.startsWith('/shorts/');
+}
+
 // ============================================================
 // YouTube sayfasından video bilgisini çek
 // ============================================================
-function scrapeVideoInfo() {
+async function scrapeVideoInfo() {
   const titleEl = document.querySelector(
     'h1.ytd-watch-metadata yt-formatted-string, h1.ytd-watch-metadata'
   );
   const channelEl = document.querySelector(
     'ytd-video-owner-renderer #channel-name a, #channel-name a'
   );
-  const video = document.querySelector('video');
+  // Shorts'ta DOM'da birden çok <video> olabilir (önceki/sonraki preload) → aktif olanı seç
+  const video = document.querySelector('ytd-reel-video-renderer[is-active] video') ||
+                document.querySelector('video');
 
-  // URL'i temizle → sadece v= parametresini tut (zaman, liste vb. atılır)
-  const vid = new URLSearchParams(location.search).get('v');
+  // URL'i normalize et: shorts dahil her video watch?v=ID olarak kaydedilir
+  // (upsert anahtarı tekil kalsın; zaman/liste parametreleri atılır)
+  const vid = currentVideoId();
   const url = vid ? `https://www.youtube.com/watch?v=${vid}` : location.href;
 
-  return {
+  const info = {
     title: titleEl?.textContent?.trim() || document.title.replace(/ - YouTube$/, ''),
     channel: channelEl?.textContent?.trim() || '',
     channelUrl: channelEl?.href || '',
@@ -59,6 +92,25 @@ function scrapeVideoInfo() {
     totalTime: video ? formatTime(video.duration) : '',
     statusKey: computeStatusKey(video)
   };
+
+  // Shorts'ta (ve YouTube markup değişirse watch'ta) başlık/kanal DOM'dan çıkmayabilir.
+  // oEmbed endpoint'i yetki istemez ve aynı origin'de → güvenilir fallback.
+  if (vid && (isShortsPage() || !info.title || !info.channel)) {
+    try {
+      const res = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+      );
+      if (res.ok) {
+        const d = await res.json();
+        // Shorts'ta document.title akıştaki aktif videoyu yansıtmayabilir; oEmbed'i tercih et
+        info.title = isShortsPage() ? (d.title || info.title) : (info.title || d.title || '');
+        info.channel = info.channel || d.author_name || '';
+        info.channelUrl = info.channelUrl || d.author_url || '';
+      }
+    } catch { /* offline vb. → eldeki bilgiyle devam */ }
+  }
+
+  return info;
 }
 
 // ============================================================
@@ -68,6 +120,14 @@ let cardHost = null;
 let cardEl = null;
 let activeSaveBtn = null;
 let saveTimeoutId = null;
+// Lookup ("zaten kayıtlı mı?") için kart bileşen referansları
+let activeCardUrl = null;
+let badgeEl = null;
+let noteHintEl = null;
+let tagFieldRef = null;
+let statusSelectRef = null;
+let statusTouched = false;   // kullanıcı durumu elle değiştirdi mi?
+let lookupApplied = false;   // mevcut etiketler karta yüklendi mi? (→ kaydette replace)
 
 // Kartı kapat — closed shadow host'u (ve olası artıkları) temizle
 function closeCard() {
@@ -75,6 +135,13 @@ function closeCard() {
   cardHost = null;
   cardEl = null;
   activeSaveBtn = null;
+  activeCardUrl = null;
+  badgeEl = null;
+  noteHintEl = null;
+  tagFieldRef = null;
+  statusSelectRef = null;
+  statusTouched = false;
+  lookupApplied = false;
   clearTimeout(saveTimeoutId);
 }
 
@@ -84,6 +151,32 @@ function handleSaveResult(msg) {
   if (!cardEl) return; // kullanıcı kartı kapatmış
   if (msg.ok) showSuccessInCard();
   else showErrorInCard(msg.error || t('unknownError'));
+}
+
+// Kart açılırken sorduğumuz "bu video kayıtlı mı?" cevabı
+function handleLookupResult(msg) {
+  if (!cardEl || !msg.existing || msg.url !== activeCardUrl) return;
+  const ex = msg.existing;
+  lookupApplied = true;
+  if (badgeEl) {
+    badgeEl.textContent = '✓ ' + t('alreadySaved');
+    badgeEl.style.display = 'block';
+  }
+  if (noteHintEl && ex.note) {
+    noteHintEl.textContent = t('existingNote') + ex.note;
+    noteHintEl.style.display = 'block';
+  }
+  // Mevcut etiketleri chip olarak yükle → kullanıcı görebilir/silebilir;
+  // kaydette kart replace modunda gönderir (silme sheet'e yansır)
+  if (tagFieldRef && ex.tags) {
+    ex.tags.split(',').forEach((tag) => tagFieldRef.addTag(tag));
+  }
+  // Sheet'teki durum daha "ileri"yse seçiciyi ona çek (kullanıcı elle değiştirmediyse)
+  const exKey = statusKeyFromText(ex.status);
+  if (statusSelectRef && !statusTouched && exKey &&
+      STATUS_RANK[exKey] > STATUS_RANK[statusSelectRef.value]) {
+    statusSelectRef.value = exKey;
+  }
 }
 
 // Kartın yerinde "✓ Kaydedildi" göster, sonra kendiliğinden kapan
@@ -104,7 +197,7 @@ function showSuccessInCard() {
 function showErrorInCard(message) {
   if (activeSaveBtn) {
     activeSaveBtn.disabled = false;
-    activeSaveBtn.textContent = 'Kaydet';
+    activeSaveBtn.textContent = t('save');
   }
   if (!cardEl) return;
   let err = cardEl.querySelector('.yt2sheets-error');
@@ -140,10 +233,11 @@ let pal = currentPalette();
 // Not kartını aç (sağ tık konumunda)
 // ============================================================
 async function openSaveCard() {
+  if (!currentVideoId()) return; // video sayfası değil (ikon/kısayol yanlış yerde tetiklendi)
   await loadLang();
   closeCard();
   pal = currentPalette();
-  const info = scrapeVideoInfo();
+  const info = await scrapeVideoInfo();
 
   // Closed Shadow DOM host → kart, sayfa scriptlerinden ve YouTube CSS'inden izole
   cardHost = document.createElement('div');
@@ -185,6 +279,19 @@ async function openSaveCard() {
   timeMeta.textContent = `${t('watched')}: ${info.watchedTime || '—'} / ${info.totalTime || '—'}`;
   Object.assign(timeMeta.style, { color: pal.faint, fontSize: '12px', marginBottom: '12px' });
 
+  // "Zaten kayıtlı" rozeti + mevcut not önizlemesi (lookup cevabı gelince görünür)
+  const badge = document.createElement('div');
+  Object.assign(badge.style, {
+    display: 'none', color: '#2ecc71', fontSize: '12px', fontWeight: '600',
+    margin: '-6px 0 8px'
+  });
+
+  const noteHint = document.createElement('div');
+  Object.assign(noteHint.style, {
+    display: 'none', color: pal.faint, fontSize: '12px', margin: '0 0 8px',
+    maxHeight: '3.6em', overflow: 'hidden', whiteSpace: 'pre-line'
+  });
+
   // Not + etiket inputları
   const noteInput = document.createElement('textarea');
   noteInput.placeholder = t('notePlaceholder');
@@ -213,6 +320,7 @@ async function openSaveCard() {
     statusSelect.appendChild(opt);
   });
   statusSelect.value = info.statusKey;
+  statusSelect.addEventListener('change', () => { statusTouched = true; });
   statusWrap.append(statusLabel, statusSelect);
 
   // Buton satırı
@@ -232,7 +340,14 @@ async function openSaveCard() {
     saveBtn.disabled = true;
     saveBtn.textContent = t('saving');
     activeSaveBtn = saveBtn;
-    const data = { ...info, note: noteInput.value.trim(), tags: tagField.getTags().join(', '), status: statusSelect.value };
+    const data = {
+      ...info,
+      note: noteInput.value.trim(),
+      tags: tagField.getTags().join(', '),
+      status: statusSelect.value,
+      statusManual: statusTouched,   // elle seçildiyse background düşürme koruması uygulamaz
+      tagsReplace: lookupApplied     // chip'ler mevcut kaydı temsil ediyor → merge değil replace
+    };
 
     try {
       chrome.runtime.sendMessage({ action: 'saveRow', data });
@@ -252,10 +367,20 @@ async function openSaveCard() {
   });
 
   btnRow.append(saveBtn, cancelBtn);
-  card.append(header, meta, timeMeta, noteInput, tagField.wrap, statusWrap, btnRow);
+  card.append(header, meta, timeMeta, badge, noteHint, noteInput, tagField.wrap, statusWrap, btnRow);
   shadow.appendChild(card);
   document.body.appendChild(cardHost);
   cardEl = card;
+  activeCardUrl = info.url;
+  badgeEl = badge;
+  noteHintEl = noteHint;
+  tagFieldRef = tagField;
+  statusSelectRef = statusSelect;
+
+  // Bu video sheet'te var mı? Cevap 'lookupResult' mesajıyla gelir
+  try {
+    chrome.runtime.sendMessage({ action: 'lookupRow', url: info.url });
+  } catch { /* bağlantı yoksa rozet gösterilmez */ }
 
   positionCard(card);
   // Firefox'ta yeni eklenen closed-shadow input'a odak ilk karede oturmayabiliyor;
@@ -349,6 +474,7 @@ function createTagInput() {
 
   return {
     wrap,
+    addTag, // lookup mevcut etiketleri chip olarak yüklerken kullanır
     getTags() {
       // Kaydederken input'ta bekleyen yazı varsa onu da etikete çevir
       if (input.value.trim()) {
@@ -384,14 +510,11 @@ function styleButton(el, bg, fg) {
 // Video açılışında "kaydedeyim mi?" balonu
 //  - YouTube SPA olduğu için her video geçişinde tetiklenir
 //  - Aynı videoyu ikinci kez sormaz (rahatsız etmesin)
+//  - Yalnız /watch sayfalarında (shorts akışında araya girmesin)
+//  - Ayarlardan kapatılabilir (storage.sync.showPrompt = false)
 // ============================================================
 let promptHost = null;
 const promptedVideos = new Set();
-
-function currentVideoId() {
-  if (location.pathname !== '/watch') return null;
-  return new URLSearchParams(location.search).get('v');
-}
 
 function closePrompt() {
   document.querySelectorAll('div[data-yt2sheets-prompt]').forEach((el) => el.remove());
@@ -400,10 +523,16 @@ function closePrompt() {
 
 // Watch sayfasındaysak ve bu videoyu daha önce sormadıysak balonu göster
 async function maybeShowPrompt() {
+  if (location.pathname !== '/watch') { closePrompt(); return; }
   const vid = currentVideoId();
-  if (!vid) { closePrompt(); return; }  // watch sayfası değil → varsa balonu kaldır
+  if (!vid) { closePrompt(); return; }
   if (promptedVideos.has(vid)) return;  // bu videoyu zaten sorduk
   if (cardEl) return;                   // not kartı zaten açık
+  let promptPref = null;
+  try {
+    ({ showPrompt: promptPref } = await chrome.storage.sync.get('showPrompt'));
+  } catch { /* storage erişilemedi → varsayılan: göster */ }
+  if (promptPref === false) return;     // kullanıcı balonu kapatmış
   promptedVideos.add(vid);
   await loadLang();
   showPrompt();
@@ -467,6 +596,7 @@ maybeShowPrompt();
 // DOM'da olduğu için event.target'ı sıradan bir <div> görür ve "input değil"
 // sanıp videoyu sarar. Bu yüzden window'da CAPTURE'da, herkesten önce durdururuz.
 //   • preventDefault YOK → karakter yine input'a yazılır.
+//   • Escape → kartı kapatır (YouTube tam ekrandan çıkma vb. tetiklenmeden).
 //   • Tag girişinin gerektirdiği tuşlar (Enter/Tab/Backspace/virgül) geçer;
 //     bunlar zaten sar/oynat kısayolu değil, chip mantığının çalışması için lazım.
 const PASS_THROUGH_KEYS = new Set(['Enter', 'Tab', 'Backspace', ',']);
@@ -474,6 +604,11 @@ const PASS_THROUGH_KEYS = new Set(['Enter', 'Tab', 'Backspace', ',']);
 function keyShield(e) {
   if (!cardHost) return;                            // kart kapalı
   if (document.activeElement !== cardHost) return;  // odak bizim kartta değil
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    if (e.type === 'keydown') closeCard();
+    return;
+  }
   if (PASS_THROUGH_KEYS.has(e.key)) return;         // tag girişine bırak
   e.stopPropagation();
 }
@@ -481,3 +616,9 @@ function keyShield(e) {
 ['keydown', 'keyup', 'keypress'].forEach((type) => {
   window.addEventListener(type, keyShield, true); // capture: herkesten önce yakala
 });
+
+// Kartın dışına tıklanınca kapat (closed shadow: kart içi tıklamalar
+// dışarıdan cardHost olarak görünür → onlar kartı kapatmaz)
+document.addEventListener('mousedown', (e) => {
+  if (cardHost && e.target !== cardHost) closeCard();
+}, true);

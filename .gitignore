@@ -1,6 +1,9 @@
 # Build çıktıları (Web Store paketi)
 dist/
 
+# npm bağımlılıkları (yalnız lint için; runtime bağımlılığı yok)
+node_modules/
+
 # Kişisel Claude Code yapılandırması (public repoda tutulmaz)
 .claude/
 

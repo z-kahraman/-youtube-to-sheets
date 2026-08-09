@@ -6,7 +6,9 @@ repository. User-facing docs: [README](README.md) / [README.tr](README.tr.md).
 ## What it is
 A Manifest V3 browser extension (Chrome + Firefox) that saves the YouTube video you're
 watching — title, channel, link, watched/total time, plus your note and tags — as a row in
-your own Google Sheet. Triggered by right-click → "Save to Sheet" on a watch page.
+your own Google Sheet. Triggered by right-click → "Save to Sheet" on a watch or shorts
+page, the Alt+S keyboard shortcut, or the toolbar icon (which opens the save card on a
+video page and the options page elsewhere).
 
 ## Tech stack
 - Manifest V3, vanilla JS (no framework, no build step — `build.sh` only zips files)
@@ -14,7 +16,10 @@ your own Google Sheet. Triggered by right-click → "Save to Sheet" on a watch p
 - OAuth 2.0, scopes: `drive.file` + `userinfo.email`
   - Chrome: `chrome.identity.getAuthToken`
   - Firefox: `browser.identity.launchWebAuthFlow` (implicit flow, separate Web OAuth client)
-- `chrome.storage.sync`: `selectedSheet`, `createdSheets`, `lang`, `theme`
+- `chrome.storage.sync`: `selectedSheet`, `createdSheets` (capped at 50 — 8KB/item quota),
+  `lang`, `theme`, `showPrompt`
+- `chrome.storage.local`: `ff_token` (Firefox token cache), `sheetTitleCache`
+  (spreadsheetId → first tab title; refreshed on 400)
 
 ## Architecture
 - **Cross-browser via shared modules.** `auth.js` and `strings.js` load in every context.
@@ -32,22 +37,46 @@ your own Google Sheet. Triggered by right-click → "Save to Sheet" on a watch p
   no FOUC since the default is hardcoded in HTML). Accent stays blue; red is reserved for
   the brand mark and destructive actions. The in-page card/prompt follow YouTube's own
   theme (`html[dark]`) for visual cohesion.
+- **Content script injection.** Matches `https://www.youtube.com/*` (NOT just `watch*`):
+  YouTube is a SPA, so a tab opened on the homepage never reloads when navigating to a
+  video — a narrower match would leave the tab without the script. Video-page gating
+  happens inside `content.js` (`currentVideoId()` handles both `/watch?v=` and
+  `/shorts/ID`; URLs are normalized to `watch?v=ID` so the upsert key stays unique).
 - **Note card isolation.** The in-page card renders inside a closed Shadow DOM, isolated
   from YouTube's CSS and scripts. A `window`-capture key shield stops keystrokes — including
   other extensions' shortcuts (e.g. Video Speed Controller's z/x seek) — from reaching the
-  page while typing in the card; Enter/Tab/Backspace/comma pass through for the tag input.
-  An on-open "save this video?" prompt is shown once per video (SPA-aware via
-  `yt-navigate-finish`).
+  page while typing in the card; Enter/Tab/Backspace/comma pass through for the tag input;
+  Escape and clicking outside close the card. An on-open "save this video?" prompt is shown
+  once per video on watch pages only (SPA-aware via `yt-navigate-finish`) and can be
+  disabled on the options page (`storage.sync.showPrompt`).
+- **Already-saved lookup.** When the card opens, `content.js` asks the background for the
+  video's existing row (`lookupRow` → `lookupResult` push message). If found: a badge +
+  existing-note preview are shown, existing tags load as removable chips (save then
+  *replaces* tags instead of merging, so chip removal deletes from the sheet), and the
+  status select is bumped to the sheet's status if it is further along.
+- **Scrape resilience.** DOM selectors are the primary source; the unauthenticated
+  same-origin oEmbed endpoint (`youtube.com/oembed`) fills in title/channel when selectors
+  fail and is preferred for the title on shorts.
+- **Auth robustness.** All Sheets/Drive calls go through `apiFetch` in `background.js`:
+  on 401 the cached token is invalidated (`invalidateToken` in `auth.js`) and the request
+  is retried once with a fresh token.
+- **Status column.** Watched > Partially watched > Opened. On auto-derived saves the
+  status never downgrades an existing row (old cell text is recognized in both languages);
+  a manually chosen status in the card (`statusManual`) always wins.
 - **Sheet access model.** With `drive.file` the extension can only touch sheets it created,
   so it tracks them in `createdSheets` rather than listing all of the user's sheets.
 
 ## Files
 - `manifest.json` / `manifest.firefox.json` — Chrome / Firefox config
-- `auth.js` — browser-agnostic OAuth layer
+- `auth.js` — browser-agnostic OAuth layer (getToken / invalidateToken / signOut / revoke)
 - `strings.js` — i18n (TR/EN)
-- `background.js` — service worker / event page: context menu, Sheets append
-- `content.js` — YouTube scrape + on-open prompt + note card (Shadow DOM) + tag chips + status
-- `options.html` / `options.css` / `options.js` — setup page: connect, create/select/open sheet, language, theme
+- `background.js` — service worker / event page: context menu, shortcut/icon handling,
+  Sheets upsert with 401 retry + sheet-title cache, row lookup
+- `content.js` — YouTube scrape (+ oEmbed fallback, shorts) + on-open prompt + note card
+  (Shadow DOM) + tag chips + status + already-saved badge
+- `options.html` / `options.css` / `options.js` — setup page: connect, create/select/open
+  sheet, language, theme, prompt toggle, recent-saves summary
+- `eslint.config.js` / `package.json` — lint setup (`npm run lint`); no runtime deps
 - `icons/` — `icon.svg` source + PNGs
 - `build.sh` — builds three zips: `chrome`, `firefox` (AMO-ready, Fx 140 / Android 142),
   and `firefox-dev` (patched to `strict_min_version: 115` for local `about:debugging`)
@@ -82,7 +111,12 @@ your own Google Sheet. Triggered by right-click → "Save to Sheet" on a watch p
   (note appended, tags merged, watched time refreshed) instead of adding a duplicate row.
   Status (Watched / Partially watched / Opened) is auto-derived from watch progress and
   editable in the card. Sheets created before this column only differ by a missing J header.
-- The context menu appears only on `youtube.com/watch` pages.
+- The context menu appears only on `youtube.com/watch` and `youtube.com/shorts/` pages;
+  the content script itself is injected on all of `youtube.com` (see Architecture).
+- `onInstalled` fires on every update too — the options page is only opened when
+  `details.reason === 'install'`.
+- Run `npm run lint` (ESLint, no build step) before packaging; `node --check *.js` is a
+  quick syntax gate.
 - The AMO-uploaded `manifest.firefox.json` declares `gecko.strict_min_version: 140.0`
   and `gecko_android.strict_min_version: 142.0` to match the Firefox versions that
   introduced `data_collection_permissions` (clears all AMO warnings). For local

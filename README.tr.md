@@ -15,15 +15,21 @@ analitik veya reklam **yok**. Uzantı yalnızca kendi oluşturduğu Sheets dosya
 ![Kurulum / ayarlar sayfası](screenshots/options-tr.png)
 
 ## Özellikler
-- YouTube watch sayfasında **sağ tık → "Sheet'e kaydet"**, ya da video açılınca
-  çıkan **"Bu videoyu kaydedeyim mi?" balonu** (her video için bir kez)
-- İmlecin olduğu yerde küçük not kartı (closed Shadow DOM ile izole)
+- Watch veya **Shorts** sayfasında **sağ tık → "Sheet'e kaydet"**, **Alt+S** kısayolu,
+  araç çubuğu ikonu ya da video açılınca çıkan **"Bu videoyu kaydedeyim mi?" balonu**
+  (her video için bir kez; ayarlardan kapatılabilir)
+- İmlecin olduğu yerde küçük not kartı (closed Shadow DOM ile izole;
+  Esc veya dışına tıklayınca kapanır)
 - Otomatik bilgi: başlık, kanal, kanal linki, video URL'si, izlenen/toplam süre
 - Not + çoklu **etiket** (virgül / Tab / Enter ile chip)
 - **Video başına tek satır (upsert):** aynı videoyu tekrar kaydedince satır güncellenir —
   not altına eklenir, etiketler birleşir, izleme süresi tazelenir — yeni satır açılmaz
-- İlerlemeye göre otomatik **Durum** (İzlendi / Kısmen izlendi / Açıldı), kartta düzenlenebilir
-- Sheet oluştur, oluşturduklarından seç ya da ayarlar sayfasından **yeni sekmede aç**
+- **Zaten kayıtlı mı?** Kart söyler: mevcut notun önizlenir, mevcut etiketler
+  düzenlenebilir chip olarak yüklenir
+- İlerlemeye göre otomatik **Durum** (İzlendi / Kısmen izlendi / Açıldı), kartta
+  düzenlenebilir — tekrar kayıtta durum sessizce geri düşürülmez
+- Sheet oluştur, oluşturduklarından seç ya da ayarlar sayfasından **yeni sekmede aç**;
+  ayarlarda **son kayıtlar özeti**
 - **Açık / koyu / otomatik tema** (ayarlar sayfası) + TR/EN dil
 - 10 sütunlu satır: Tarih, Başlık, Kanal, Kanal Linki, URL, İzleme Süresi, Toplam Süre, Not, Etiketler, Durum
 
