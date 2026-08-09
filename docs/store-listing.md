@@ -13,10 +13,14 @@ user's own Google Sheet.
 
 ## Permission justifications
 - **identity:** to connect the user's Google account via OAuth and call the Sheets API.
-- **storage:** to store the selected/created sheet's id and name (and language preference).
-- **contextMenus:** to add the "Save to Sheet" right-click menu on YouTube pages.
+- **storage:** to store the selected/created sheet's id and name (and language/theme/prompt preferences).
+- **contextMenus:** to add the "Save to Sheet" right-click menu on YouTube watch and Shorts pages.
+- **activeTab:** when the user clicks the toolbar icon or presses the shortcut, to tell whether
+  the current tab is a YouTube video page (opens the save card there, options page elsewhere).
 - **host googleapis.com:** Google API calls to append rows to Sheets and read the account email.
-- **content script (youtube.com/watch):** to read video info and show the note card.
+- **content script (youtube.com):** injected site-wide because YouTube is a single-page app
+  (a tab opened on the homepage never reloads when navigating to a video); it only acts on
+  watch/Shorts pages, where it reads video info and shows the note card.
 - **scope drive.file:** to write only to Sheets files the extension created.
 - **scope userinfo.email:** to show the connected account on the settings page.
 
@@ -37,13 +41,16 @@ Save the YouTube videos you watch — with notes and tags — to your own Google
 ```
 YouTube to Sheets is the fastest way to keep the videos you watch organized.
 
-While watching, right-click the page → "Save to Sheet". A small card opens with the video's title, channel and duration pre-filled — just add your note and tags and save. The row is appended to your own Google Sheet instantly.
+While watching, right-click the page → "Save to Sheet" — or just press Alt+S. A small card opens with the video's title, channel and duration pre-filled — add your note and tags and save. The row goes straight into your own Google Sheet.
 
 Features:
-• Quick save via right-click (on YouTube watch pages)
-• Auto-filled: title, channel, channel link, video URL, watched/total time
+• Quick save via right-click, the Alt+S shortcut, the toolbar icon, or the optional "Save this video?" prompt
+• Works on regular videos and YouTube Shorts
+• Auto-filled: title, channel, channel link, video URL, watched/total time, and a watch status (Watched / Partially watched / Opened)
 • Note + multiple tags (comma or Tab)
-• Create your own Google Sheet or pick one you created before
+• One row per video: saving again updates the same row — and the card shows an "already saved" badge with your existing note and tags
+• Create your own Google Sheet or pick one you created before; settings show your total saves and the 5 most recent
+• Light / dark / auto theme, English + Turkish interface
 
 Privacy-first: your data goes straight from your browser to Google. No third-party servers, analytics, or ads. The extension only accesses Sheets it created.
 
@@ -63,13 +70,16 @@ Open source (MIT): https://github.com/z-kahraman/youtube-to-sheets
 ```
 YouTube to Sheets, izlediğin videoları düzenli tutmanın en hızlı yolu.
 
-İzlerken bir videoyu kaydetmek istediğinde sayfaya sağ tıkla → "Sheet'e kaydet" de. Açılan küçük kartta videonun başlığı, kanalı ve süresi otomatik dolu gelir; sen sadece notunu ve etiketlerini ekleyip kaydet. Satır anında kendi Google Sheets dosyana düşer.
+İzlerken bir videoyu kaydetmek istediğinde sayfaya sağ tıkla → "Sheet'e kaydet" de — ya da sadece Alt+S'ye bas. Açılan küçük kartta videonun başlığı, kanalı ve süresi otomatik dolu gelir; sen sadece notunu ve etiketlerini ekleyip kaydet. Satır doğrudan kendi Google Sheets dosyana düşer.
 
 Özellikler:
-• Sağ tık ile hızlı kaydetme (YouTube izleme sayfalarında)
-• Başlık, kanal, kanal linki, video URL'si, izlenen/toplam süre otomatik
+• Sağ tık, Alt+S kısayolu, araç çubuğu ikonu ya da isteğe bağlı "Bu videoyu kaydedeyim mi?" balonuyla hızlı kaydetme
+• Normal videolarda ve YouTube Shorts'ta çalışır
+• Başlık, kanal, kanal linki, video URL'si, izlenen/toplam süre ve izleme durumu (İzlendi / Kısmen izlendi / Açıldı) otomatik
 • Not + çoklu etiket (virgül veya Tab)
-• Kendi Google Sheets dosyanı oluştur veya daha önce oluşturduklarından seç
+• Video başına tek satır: aynı videoyu tekrar kaydedince satır güncellenir — kart "zaten kayıtlı" rozetiyle mevcut notunu ve etiketlerini gösterir
+• Kendi Google Sheets dosyanı oluştur veya daha önce oluşturduklarından seç; ayarlarda toplam kayıt sayın ve son 5 kaydın görünür
+• Açık / koyu / otomatik tema, Türkçe + İngilizce arayüz
 
 Gizlilik öncelikli: Verilerin doğrudan tarayıcından Google'a gider. Üçüncü taraf sunucu, analitik veya reklam yok. Uzantı yalnızca kendi oluşturduğu Sheets dosyalarına erişir.
 
