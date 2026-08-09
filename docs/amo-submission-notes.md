@@ -12,6 +12,148 @@ review context. The privacy policy is in `PRIVACY.en.md` / `PRIVACY.md`.
 
 ---
 
+## Release notes — v0.5.0
+
+### English (default locale)
+
+```
+Big usability update.
+
+New
+- YouTube Shorts support: right-click → "Save to Sheet" now works on
+  /shorts/ pages too.
+- Alt+S keyboard shortcut, and a smarter toolbar icon: on a video page it
+  opens the save card, elsewhere it opens the settings page.
+- "Already saved" badge: the card now tells you when a video is already in
+  your sheet, previews your existing note, and loads existing tags as
+  editable chips (removing a chip removes the tag from the sheet too).
+- The on-open "Save this video?" bubble can be turned off in settings.
+- Settings page shows the selected sheet's total row count and the last
+  5 saves.
+
+Fixed
+- The big one: if you opened youtube.com first and then clicked into a
+  video, "Save to Sheet" could silently do nothing (YouTube is a
+  single-page app and the extension never got injected into that tab).
+- The settings page no longer pops up after every extension update.
+- Expired Google sessions refresh automatically instead of failing with
+  a bare "401" error.
+- Re-saving a fully watched video no longer downgrades its status; a
+  status you pick by hand always wins.
+- Esc or clicking outside now closes the note card.
+
+Permissions: adds activeTab (used only when you click the toolbar icon /
+shortcut, to tell whether the current tab is a YouTube video page). OAuth
+scopes unchanged — your data still goes only from your browser to Google.
+```
+
+### Türkçe
+
+```
+Büyük kullanışlılık güncellemesi.
+
+Yeni
+- YouTube Shorts desteği: /shorts/ sayfalarında da sağ tık → "Sheet'e
+  kaydet" çalışıyor.
+- Alt+S klavye kısayolu ve daha akıllı araç çubuğu ikonu: video
+  sayfasındaysan kaydetme kartını, değilsen ayarlar sayfasını açar.
+- "Zaten kayıtlı" rozeti: kart, video sheet'inde varsa söylüyor; mevcut
+  notunu önizliyor ve mevcut etiketleri düzenlenebilir chip olarak
+  yüklüyor (chip silmek etiketi sheet'ten de siler).
+- Video açılışındaki "Bu videoyu kaydedeyim mi?" balonu ayarlardan
+  kapatılabiliyor.
+- Ayarlar sayfası seçili sheet'in toplam kayıt sayısını ve son 5 kaydı
+  gösteriyor.
+
+Düzeltmeler
+- En önemlisi: önce youtube.com'u açıp sonra bir videoya tıkladıysan
+  "Sheet'e kaydet" sessizce hiçbir şey yapmayabiliyordu (YouTube tek
+  sayfa uygulaması olduğu için eklenti o sekmeye hiç enjekte olmuyordu).
+- Ayarlar sayfası artık her eklenti güncellemesinde kendiliğinden açılmıyor.
+- Süresi dolan Google oturumları "401" hatası vermek yerine otomatik
+  yenileniyor.
+- Tamamen izlenmiş bir videoyu tekrar kaydetmek durumunu geri düşürmüyor;
+  elle seçtiğin durum her zaman geçerli.
+- Esc ya da kartın dışına tıklamak kartı kapatıyor.
+
+İzinler: activeTab eklendi (yalnız ikona/kısayola bastığında, sekmenin
+YouTube video sayfası olup olmadığını anlamak için). OAuth scope'ları
+değişmedi — verilerin hâlâ yalnız tarayıcından Google'a gider.
+```
+
+---
+
+## Notes to reviewer — v0.5.0
+
+> AMO ~3000 karakter limiti. Bu blok ~2900 chars.
+
+```
+0.5.0 on top of 0.4.6. This release DOES change the manifest — each change
+is explained below. OAuth scopes (drive.file + userinfo.email) and
+data_collection_permissions are UNCHANGED.
+
+MANIFEST CHANGES
+
+1) content_scripts.matches: youtube.com/watch* → youtube.com/*
+   YouTube is a SPA: a tab opened on the homepage never full-page-loads
+   when the user clicks into a video, so with the old watch*-only match
+   the content script was never injected in that tab and "Save to Sheet"
+   silently did nothing. The script now injects on all youtube.com pages
+   but gates every feature internally on the page type (currentVideoId()
+   accepts /watch?v= and /shorts/ID only). Same site, same public page
+   metadata as before — no new data access.
+
+2) NEW permission: activeTab
+   The toolbar icon now opens the save card when the active tab is a
+   YouTube video page, and the options page otherwise; activeTab exposes
+   tab.url at the moment of the user's click so background.js can decide.
+   Chosen specifically to avoid the broad "tabs" permission.
+
+3) NEW manifest key: commands (Alt+S)
+   Opens the same save card on the current video page (tabs.query +
+   sendMessage). On a non-video page the message has no receiver and the
+   error is swallowed.
+
+4) contextMenus documentUrlPatterns now also includes
+   https://www.youtube.com/shorts/* (Shorts support). Shorts URLs are
+   normalized to watch?v=ID before saving so the one-row-per-video
+   upsert key stays unique.
+
+BEHAVIOR CHANGES
+
+- Already-saved lookup: when the card opens, background reads the user's
+  own selected sheet (same Sheets API/scope) to show an "already saved"
+  badge, existing-note preview, and existing tags.
+- New same-origin fetch: https://www.youtube.com/oembed (unauthenticated
+  GET, title/author only) as a scraping fallback when DOM selectors fail
+  and on Shorts. Called from the content script on youtube.com itself —
+  no new host permission.
+- 401 responses invalidate the cached token and retry once with a fresh
+  one (auth.js invalidateToken).
+- New storage keys: sync.showPrompt (on-open prompt toggle),
+  local.sheetTitleCache (first-tab title cache; saves one API call/save).
+- Status column never auto-downgrades on re-save; a manual pick wins.
+- Esc / outside click closes the card. Options page shows total row
+  count + last 5 rows of the selected sheet (read-only, same API).
+
+HOW TO TEST
+1. Install → Connect → Create a sheet (as in 0.4.6).
+2. Open the youtube.com HOMEPAGE, click into any video (no full reload),
+   right-click → "Save to Sheet" → card opens. (Broken in 0.4.6.)
+3. Alt+S opens the card; the toolbar icon opens it on a video page and
+   opens options elsewhere.
+4. Save a video, reopen it → "Already saved" badge + existing note/tags;
+   saving updates the same row.
+5. Open a /shorts/ URL → right-click → save works.
+6. Options: untick "Show the save prompt…" → the on-open bubble stops.
+
+SOURCE shape unchanged: ./build.sh, vanilla JS, no minify/bundle. ESLint
+config + package.json are dev-only and not in the zip.
+github.com/z-kahraman/youtube-to-sheets
+```
+
+---
+
 ## Release notes — v0.4.6
 
 > AMO'ya doğrudan 0.4.6 yüklenir; 0.4.5 GitHub'da tag olarak duruyor ama AMO'da
