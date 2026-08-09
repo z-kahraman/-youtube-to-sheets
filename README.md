@@ -32,6 +32,12 @@ servers, analytics, or ads. The extension only accesses Sheets it created (`driv
 - **Light / dark / auto theme** (options page) + TR/EN language
 - 10-column row: Date, Title, Channel, Channel Link, URL, Watched Time, Total Time, Note, Tags, Status
 
+## Install
+- **Firefox:** [addons.mozilla.org/firefox/addon/youtube-to-sheets](https://addons.mozilla.org/firefox/addon/youtube-to-sheets/)
+- **Chrome:** not on the Web Store yet — grab `yt2sheets-chrome.zip` from the
+  [latest release](https://github.com/z-kahraman/youtube-to-sheets/releases/latest)
+  and load it via developer mode (below)
+
 ## Install (local / developer mode)
 
 Build the packages: `./build.sh` →

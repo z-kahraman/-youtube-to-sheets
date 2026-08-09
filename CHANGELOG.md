@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) · Versioning: [SemVer](https://semver.org/) (0.x).
 
+## [Unreleased]
+
+### Added
+- Feedback link (→ GitHub issues) in the options-page footer.
+- Docs: AMO Technical Details copy, Chrome Web Store listing copy, launch-post drafts.
+
 ## [0.5.0] — 2026-08-09
 
 ### Added

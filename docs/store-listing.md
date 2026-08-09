@@ -85,3 +85,65 @@ Gizlilik öncelikli: Verilerin doğrudan tarayıcından Google'a gider. Üçünc
 
 Açık kaynak (MIT): https://github.com/z-kahraman/youtube-to-sheets
 ```
+
+---
+
+## Technical Details (AMO Manage → Technical Details)
+
+> Eski metindeki `github.com/zaferkahraman/...` linkleri 404'tü (doğrusu `z-kahraman`);
+> "Version 0.1.0 / rough edges" ve "kendi Google Cloud projeni kurman gerekir" ifadeleri
+> kaldırıldı (son kullanıcının kendi OAuth client'ına ihtiyacı yok, sadece Connect der).
+
+**Developer Comments (public):**
+```
+A privacy-first extension that saves the YouTube video you're watching — title, channel, link, watched/total time, plus your note and tags — as a row in your own Google Sheet.
+
+🚀 QUICK START
+1. Connect your Google account on the settings page and create a sheet
+2. Open a YouTube video → right-click → "Save to Sheet" (or press Alt+S)
+3. Add your note and tags, save — done. Saving the same video again updates its row instead of duplicating it.
+
+🔒 PRIVACY
+- No data is ever sent to the developer's servers (there are no developer servers)
+- Everything goes straight from your browser to Google; notes are written to YOUR sheet
+- No analytics, no tracking, no third-party services
+- The extension can only access Sheets it created itself (drive.file scope)
+- Source code is fully open and auditable on GitHub
+
+🐛 BUG REPORTS / FEATURE REQUESTS
+Open an issue on GitHub:
+https://github.com/z-kahraman/youtube-to-sheets/issues
+
+ℹ️ This extension is not affiliated with, endorsed by, or sponsored by Google or YouTube. All trademarks belong to their respective owners.
+```
+
+**Whiteboard (reviewer-only):**
+```
+Open-source MV3 extension. Repository: https://github.com/z-kahraman/youtube-to-sheets — the submitted zip is built by ./build.sh from this source (vanilla JS, no bundler/minification).
+
+OVERVIEW: Saves the YouTube video the user is watching (title, channel, URL, watched/total time) plus the user's note, tags and a watch status as a row in a Google Sheet the user owns. Upsert: re-saving the same video updates its existing row.
+
+WHY EACH PERMISSION IS NEEDED
+- identity: Google OAuth via browser.identity.launchWebAuthFlow (separate Web client, implicit flow + silent prompt=none refresh). chrome.identity.getAuthToken references in auth.js are Chrome-only, behind a runtime check, written in bracket notation.
+- storage: sync = selectedSheet, createdSheets, lang, theme, showPrompt; local = token cache + sheet tab-title cache.
+- contextMenus: "Save to Sheet" item, documentUrlPatterns-restricted to youtube.com/watch* and youtube.com/shorts/*.
+- activeTab: on toolbar click / Alt+S, to tell whether the active tab is a YouTube video page (opens the save card there, options page elsewhere). Chosen to avoid the broad "tabs" permission.
+- hosts sheets.googleapis.com / www.googleapis.com / oauth2.googleapis.com: Sheets API v4 read/write on the user's own sheet, drive.file files.list, userinfo.email, token revoke.
+- content script (youtube.com/*): site-wide because YouTube is a SPA — a tab opened on the homepage never full-page-loads when navigating to a video, so a watch*-only match would never inject. It acts only on watch/Shorts pages: reads visible video metadata, renders the note card in a closed Shadow DOM, and uses the same-origin unauthenticated youtube.com/oembed endpoint as a title/channel fallback.
+
+OAUTH SCOPES: drive.file (only files this extension created) + userinfo.email (shown on the options page). No restricted scopes; no CASA needed.
+
+DATA FLOW: browser → Google APIs directly. No developer servers, no analytics, no third parties. data_collection_permissions: personallyIdentifyingInfo (account email shown in options) + websiteContent (YouTube metadata the user explicitly saves to their own sheet).
+```
+
+---
+
+## Chrome Web Store (yayınlanınca)
+
+- Category: **Productivity**. One-time $5 developer fee: chrome.google.com/webstore/devconsole
+- Summary (≤132) ve Description: yukarıdaki English bloklarının aynısı kullanılır.
+- CWS her izni ayrı gerekçeyle sorar — "Permission justifications" bölümündeki satırlar
+  bire bir yapıştırılabilir.
+- Privacy tab: "Does not collect user data" ler işaretlenir; single-purpose statement
+  yukarıdaki "Single-purpose statement" bölümünden.
+- Zip: `dist/yt2sheets-chrome.zip` (Chrome OAuth client manifest'te gömülü).

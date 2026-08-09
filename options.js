@@ -137,6 +137,9 @@ function applyI18n() {
   const privacyBase = 'https://github.com/z-kahraman/youtube-to-sheets/blob/main/';
   document.getElementById('privacy-link').href =
     privacyBase + (currentLang() === 'tr' ? 'PRIVACY.md' : 'PRIVACY.en.md');
+  // Geri bildirim → GitHub issues (mağaza yorumlarından daha izlenebilir)
+  document.getElementById('feedback-link').href =
+    'https://github.com/z-kahraman/youtube-to-sheets/issues';
 }
 
 async function refreshUI() {

@@ -33,6 +33,11 @@ analitik veya reklam **yok**. Uzantı yalnızca kendi oluşturduğu Sheets dosya
 - **Açık / koyu / otomatik tema** (ayarlar sayfası) + TR/EN dil
 - 10 sütunlu satır: Tarih, Başlık, Kanal, Kanal Linki, URL, İzleme Süresi, Toplam Süre, Not, Etiketler, Durum
 
+## Kurulum
+- **Firefox:** [addons.mozilla.org/firefox/addon/youtube-to-sheets](https://addons.mozilla.org/firefox/addon/youtube-to-sheets/)
+- **Chrome:** henüz Web Store'da değil — [son release'ten](https://github.com/z-kahraman/youtube-to-sheets/releases/latest)
+  `yt2sheets-chrome.zip` indirip geliştirici moduyla yükleyin (aşağıda)
+
 ## Kurulum (lokal / geliştirici modu)
 
 Paketleri üret: `./build.sh` →
